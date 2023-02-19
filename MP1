@@ -102,34 +102,37 @@ def generateBasisVectorMatrix():
                 # this creates a KxK matrix for the basisChip
                 basisChip.append(basisChipRow)
 
-            basisChip = np.asarray(basisChip)
-            # print(basisChip)
-            # imgShow(basisChip)
-            # print(str(u) + "," + str(v))
-
             # now that we have a KxK matrix for the basisChip, need to transpose it
             # this is because x is technically columns and y rows
             # basically for each value on the horizontal axis, we want
             # the list of values to stretch down along the vertical axis
+            basisChip = np.asarray(basisChip)
             np.transpose(basisChip)
 
             # need to rasterize each basisChip now, and then we can add to basisVectorMatrix
             # turns each KxK basisChip matrix into a single column with K^2 values
-            basisChip = basisChip.reshape(-1, 1).tolist()
+            # np.hsplit turns basisChip into an array of k separate columns
+            basisChipCols = np.hsplit(basisChip, k)
+            # vertically stacking all the columns on top of each other to "rasterize"
+            rasterizedBasisChip = np.vstack(basisChipCols)
 
             # appending each column of K^2 values horizontally to basisVectorMatrix
-            basisVectorMatrix.append(basisChip)
-            # print(basisVectorMatrix.shape)
+            basisVectorMatrix.append(rasterizedBasisChip)
 
+
+    # our problem here is that basisVectorMatrix is a 3D array:
+    # it is an K^2 size array of K^2x1 arrays, therefore K^2xK^2x1
+    # we want it to be simply K^2xK^2
+    # for a 3D array of shape (x,y,z), we can turn it into (x*y,z) by reshape(-1,z)
     basisVectorMatrix = np.asarray(basisVectorMatrix)
+    # we want the 1 dimension to be one of x and y so that we have (K^2 * 1 by K^2)
+    # transposes basisVectorMatrix to be 1xK^2xK^2
     basisVectorMatrix = np.transpose(basisVectorMatrix, (2, 0, 1))
     basisVectorMatrix = basisVectorMatrix.reshape(-1, (k*k))
+    # ended up having to transpose one last time
     basisVectorMatrix = np.transpose(basisVectorMatrix)
-    imgShow(basisVectorMatrix)
 
-    # end of for loops
-    # basisVectorMatrix is a 1xK^2 array, each entry is a KxK basis chip
-    # TODO: rasterize each entry and form basisVectorMatrix as a K^2xK^2 matrix
+    return basisVectorMatrix
 
 
 def main():
@@ -149,7 +152,11 @@ def main():
     # print("Corrupt KxK Block")
     # print(corruptedkxkBlock)
 
-    generateBasisVectorMatrix()
+    # TODO: Visualization for K = 8, K = 16 basis vectors
+    imgShow(generateBasisVectorMatrix())
+
+    # TODO: MSE as a function of regularization parameter with S = 50
+    # TODO: LASSO reconstruction using best regularization parameter value
 
 
 main()
