@@ -1,0 +1,155 @@
+import math
+import random
+
+import numpy
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from numpy import double
+from PIL import Image
+
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
+random.seed(a=None, version=2)
+# value for kxk blocks
+k = 8
+
+
+# reads and returns the argument image
+def imgRead(file):
+    imgIn = Image.open(file).convert('L')
+    return double(imgIn)
+
+
+# plots the argument image
+def imgShow(imgOut):
+    plt.imshow(imgOut, cmap=cm.gray)
+    # plt.imshow(imgOut)
+    plt.show()
+
+
+# k^2 - S corrupted pixels given S = sensed pixels
+def corruptKxKBlock(imgIn, S):
+    corruptPixels = random.sample([[x, y]
+                                   for x in range(0, imgIn.shape[0])
+                                   for y in range(0, imgIn.shape[1])],
+                                  (k * k - S))
+    for pixel in corruptPixels:
+        imgIn[pixel[0], pixel[1]] = np.nan
+
+    return imgIn
+
+
+# returns KxK block with topLeftX and topLeftY as the top-left corner pixel
+# X = col number, Y = row number !!!
+def getKxKBlock(imgIn, topLeftX, topLeftY):
+    # imgIn.shape returns a [width, height] array of the image dimensions
+    # if statement ensures we have enough space to make the KxK block
+    if topLeftX + k <= imgIn.shape[0] and topLeftY <= imgIn.shape[1]:
+        imgIn = np.array(imgIn)
+        imgOut = []
+        for rowNum in range(topLeftY, (topLeftY + k)):
+            # arr = each individual row of the KxK block going top to bottom
+            arr = imgIn[rowNum, topLeftX:(topLeftX + k)]
+            imgOut.append(arr.tolist())
+        imgOut = np.asarray(imgOut)
+        return imgOut
+    else:
+        raise Exception('Invalid Dimensions!')
+
+
+def generateBasisVectorMatrix():
+    basisVectorMatrix = []
+    for u in range(1, k + 1):
+
+        for v in range(1, k + 1):
+
+            # there will be K^2 basisChips altogether
+            # one basisChip for every (u, v) pair
+            # u goes 1 to K, and for each u, v goes 1 to K for K^2 total basisChips
+            # each basisChip is a KxK matrix of DCT values for a (x, y) pair
+            basisChip = []
+            # each x iteration from 1 to K produces K rows
+            for x in range(1, k + 1):
+
+                # for each x, we get every pairing of the y values
+                # for each resulting (x, y) pair, we calculate a DCT value
+                # each basisChipRow is a row vector with K elements
+                # each element is DCT value for [(X=x and y={1,...,K})]
+                basisChipRow = []
+                for y in range(1, k + 1):
+
+                    # calculate DCT
+                    alphaU = np.sqrt((2 / k))
+                    if u == 1:
+                        alphaU = np.sqrt((1 / k))
+                    betaV = np.sqrt((2 / k))
+                    if v == 1:
+                        betaV = np.sqrt((1 / k))
+
+                    valXU = ((2 * x - 1) * (u - 1) / (2 * k))
+                    valYV = ((2 * y - 1) * (v - 1) / (2 * k))
+
+                    cosXU = np.cos(np.pi * valXU)
+                    cosYV = np.cos(np.pi * valYV)
+
+                    element = alphaU * betaV * cosXU * cosYV
+                    basisChipRow.append(element)
+
+                # now that each row is full, we want to stack rows on top of each other
+                # this creates a KxK matrix for the basisChip
+                basisChip.append(basisChipRow)
+
+            basisChip = np.asarray(basisChip)
+            # print(basisChip)
+            # imgShow(basisChip)
+            # print(str(u) + "," + str(v))
+
+            # now that we have a KxK matrix for the basisChip, need to transpose it
+            # this is because x is technically columns and y rows
+            # basically for each value on the horizontal axis, we want
+            # the list of values to stretch down along the vertical axis
+            np.transpose(basisChip)
+
+            # need to rasterize each basisChip now, and then we can add to basisVectorMatrix
+            # turns each KxK basisChip matrix into a single column with K^2 values
+            basisChip = basisChip.reshape(-1, 1).tolist()
+
+            # appending each column of K^2 values horizontally to basisVectorMatrix
+            basisVectorMatrix.append(basisChip)
+            # print(basisVectorMatrix.shape)
+
+    basisVectorMatrix = np.asarray(basisVectorMatrix)
+    basisVectorMatrix = np.transpose(basisVectorMatrix, (2, 0, 1))
+    basisVectorMatrix = basisVectorMatrix.reshape(-1, (k*k))
+    basisVectorMatrix = np.transpose(basisVectorMatrix)
+    imgShow(basisVectorMatrix)
+
+    # end of for loops
+    # basisVectorMatrix is a 1xK^2 array, each entry is a KxK basis chip
+    # TODO: rasterize each entry and form basisVectorMatrix as a K^2xK^2 matrix
+
+
+def main():
+    originalImage = imgRead('C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
+    # imgShow(originalImage)
+    # print("Original Image")
+    # print(originalImage)
+    # print(originalImage.shape)
+
+    kxkBlock = getKxKBlock(originalImage, 100, 150)
+    # imgShow(kxkBlock)
+    # print("KxK Block")
+    # print(kxkBlock)
+
+    # corruptedkxkBlock = corruptKxKBlock(kxkBlock, 50)
+    # imgShow(corruptedkxkBlock)
+    # print("Corrupt KxK Block")
+    # print(corruptedkxkBlock)
+
+    generateBasisVectorMatrix()
+
+
+main()
