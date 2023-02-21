@@ -135,7 +135,58 @@ def generateBasisVectorMatrix():
     return basisVectorMatrix
 
 
+def imageReconstruction(image, S):
+    # the image we pass will be the corrupted KxK block for now
+    C = image
+    print(C)
+    # S = number of sensed pixels
+    S = S
+    # column vector of the remaining sensed pixels
+    # sensed pixels = sampled pixels
+    # remove NaN values from C and then turn remaining values into a column vector
+    D = C[~np.isnan(C)]
+    D = D.reshape(-1, 1)
+
+    # Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
+    # look up logspace doc, same values every program compile :D
+
+    # lambdaRange = np.logspace(-6, 6, num=40, base=10.0, endpoint=True)
+    lambdaRange = [1e6]
+
+    for regularizationParam in lambdaRange:
+        # total error for each separate regularization parameter
+        totalError = 0
+        for M in range(0, 1):
+            m = np.floor(S/6)
+
+            # TODO: Partition the S sensed pixels in the block (the training set) into
+            # TODO: m=floor(S/6) testing pixels and (S-m) training pixels
+            # Logic for determining trainingSet and testingSet:
+            # 1. set trainingSet as the values of D as a row vector, we will delete the m pixels to get our S-m set
+            # 2. generate a list of the indices (our 'm' pixels) that we will be
+            #   (a). adding the value of trainingSet[index] to testingSet
+            #   (b). removing trainingSet[index]
+            # 3. We sort trainingSetIndices greatest to least after the first loop to avoid arrayOutOfBounds errors
+            elementNum = len(D) * len(D[0])
+            trainingSet = np.reshape(D, elementNum)
+            trainingSetIndices = np.random.choice(elementNum, size=int(m), replace=False)
+            testingSet = []
+            for index in trainingSetIndices:
+                testingSet.append(trainingSet[index])
+            trainingSetIndices[::-1].sort()
+            for index in trainingSetIndices:
+                trainingSet = np.delete(trainingSet, index)
+            testingSet = np.asarray(testingSet)
+
+            # TODO: Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
+            # If the trainingSet is the column vector 'D', 
+            # then we need the original (x,y) coordinates of each pixel in the trainingSet to get 'A'
+
+
+
 def main():
+    S = 50
+
     originalImage = imgRead('C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
     # imgShow(originalImage)
     # print("Original Image")
@@ -147,16 +198,19 @@ def main():
     # print("KxK Block")
     # print(kxkBlock)
 
-    # corruptedkxkBlock = corruptKxKBlock(kxkBlock, 50)
+    corruptedkxkBlock = corruptKxKBlock(kxkBlock, S)
     # imgShow(corruptedkxkBlock)
     # print("Corrupt KxK Block")
     # print(corruptedkxkBlock)
+    # print()
+
 
     # TODO: Visualization for K = 8, K = 16 basis vectors
-    imgShow(generateBasisVectorMatrix())
+    # imgShow(generateBasisVectorMatrix())
 
     # TODO: MSE as a function of regularization parameter with S = 50
     # TODO: LASSO reconstruction using best regularization parameter value
+    imageReconstruction(corruptedkxkBlock, S)
 
 
 main()
