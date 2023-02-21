@@ -11,11 +11,16 @@ from PIL import Image
 
 import warnings
 
+from sklearn import linear_model
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 random.seed(a=None, version=2)
 # value for kxk blocks
 k = 8
+
+
+# ------------------------------------------------- FUNCTIONS ------------------------------------------------------
 
 
 # reads and returns the argument image
@@ -59,6 +64,9 @@ def getKxKBlock(imgIn, topLeftX, topLeftY):
         return imgOut
     else:
         raise Exception('Invalid Dimensions!')
+
+
+# ----------------------------------------- BASIS VECTOR MATRIX ------------------------------------------------------
 
 
 def generateBasisVectorMatrix():
@@ -135,64 +143,144 @@ def generateBasisVectorMatrix():
     return basisVectorMatrix
 
 
-def imageReconstruction(image, S):
+# -------------------------------------- IMAGE RECONSTRUCTION FUNCTIONS ----------------------------------------------
+
+def getPartitionedPixelCoords(S, C):
+    m = np.floor(S / 6)
+
+    # generates row vector of all tuple (x, y) pairs for the matrix of size k*k
+    # i.e. for k = 8, allKxKCoords = [[0,0], [0,1], ... , [7, 6], [7,7]]
+    allKxKCoords = list(product(range(k), range(k)))
+    allKxKCoords = np.asarray(allKxKCoords)
+
+    # randomly draw m pixels from the non-NaN values to form the test set
+    testingSetCoords = []
+    while len(testingSetCoords) < m:
+        # chooses a single random index from allKxKCoords each iteration of while loop
+        randomCoordIndex = np.random.choice(len(allKxKCoords), size=1)
+        # randomCoord = the (x, y) pair from allKxKCoords at the randomly selected index
+        randomCoord = [allKxKCoords[randomCoordIndex][0][0], allKxKCoords[randomCoordIndex][0][1]]
+        # if this coordinate is not already in testingSetCoords = no replacement, only unique values
+        # ignores NaN values
+        if randomCoord not in testingSetCoords and not math.isnan(C[randomCoord[0], randomCoord[1]]):
+            testingSetCoords.append(randomCoord)
+        # repeat until we have 'm' unique, non-NaN coordinates in testingSetCoords
+
+    # use the remaining (S-m) pixels to form the training set
+    trainingSetCoords = []
+    # idea here is just to iterate through the KxK matrix, C, and
+    # 1. if the value isn't one in testingSetCoords
+    # 2. if the value isn't NaN
+    # then it belongs in the trainingSetCoords
+    for row in range(k):
+        for col in range(k):
+            if [row, col] not in testingSetCoords and not math.isnan(C[row][col]):
+                trainingSetCoords.append([row, col])
+    # this gives us our (S-m) non-NaN coordinates in trainingSetCoords
+
+    return testingSetCoords, trainingSetCoords
+
+
+def getSampledImageWeights(trainingSetCoords, C):
+    # just gets the values for pixel intensities from the coordinates
+    # returns it as a column vector to make it less annoying for me
+    trainingSet = []
+    for coordinate in trainingSetCoords:
+        trainingSet.append(C[coordinate[0], coordinate[1]])
+    trainingSet = np.asarray(trainingSet).reshape(-1, 1)
+
+    return trainingSet
+
+
+def getSampledBasisVectorMatrix(trainingSetCoords, B):
+    A = []
+    for coordinate in trainingSetCoords:
+        # idea here is that every x [0-7] has their own [0-7] y values
+        # and (x, y) spatial variables go down row-wise,
+        # so to find the actual row out of K^2 rows, it is 8x+y
+        basisRowNumber = 8 * coordinate[0] + coordinate[1]
+        basisRow = np.asarray(B[basisRowNumber, :])
+        A.append(basisRow)
+    A = np.asarray(A)
+
+    return A
+
+
+def getLassoValues(trainingSetCoords, B, completeBlock):
+    # if trainingBasisMatrix is the matrix 'A',
+    # A = rows from B corresponding to (x,y) locations of sensed pixels
+    A = getSampledBasisVectorMatrix(trainingSetCoords, B)
+
+    # constant column u=1, v=1
+    c = (A[:, 0]).reshape(-1, 1)
+    Aprime = A[:, 1:]
+    temp = []
+    for row in range(len(Aprime)):
+        col = Aprime[row].reshape(-1, 1)
+        temp.append(col)
+    temp = np.asarray(temp)
+    temp = np.transpose(temp, (2, 0, 1))
+    temp = temp.reshape(-1, (k * k) - 1)
+    Aprime = temp
+
+    completeBlock = np.asarray(completeBlock).reshape(-1, 1)
+    kComplete = np.dot(np.linalg.inv(B), completeBlock)
+    kOne = [kComplete[0][0]]
+    kPrime = kComplete[1:, 0]
+    kPrime = kPrime.reshape(-1, 1)
+
+    return c, Aprime, kOne, kPrime
+
+
+# ------------------------------------------- IMAGE RECONSTRUCTION ---------------------------------------------------
+
+
+def imageReconstruction(completeBlock, corruptedKxKBlock, S):
+    # B = Basis Vector Matrix, C = corrupted KxK block for now, S = number of sensed/sampled pixels
     B = generateBasisVectorMatrix()
-    # the image we pass will be the corrupted KxK block for now
-    C = image
-    # S = number of sensed pixels
-    S = S
-    # column vector of the remaining sensed pixels
-    # sensed pixels = sampled pixels
-    # remove NaN values from C and then turn remaining values into a column vector
-    # D = C[~np.isnan(C)]
-    # D = D.reshape(-1, 1)
+    C = corruptedKxKBlock
 
-    # Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
-    # look up logspace doc, same values every program compile :D
+    # TODO: Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
+    # look up logspace doc, same values every program compile
 
-    # lambdaRange = np.logspace(-6, 6, num=40, base=10.0, endpoint=True)
-    lambdaRange = [1e6]
+    lambdaRange = np.logspace(-6, 6, num=40, base=10.0, endpoint=True)
+    # lambdaRange = [1e6]
 
     for regularizationParam in lambdaRange:
         # total error for each separate regularization parameter
         totalError = 0
-        for M in range(0, 1):
-            # TODO: Partition the S sensed pixels in the block (the training set) into
-            # TODO: m=floor(S/6) testing pixels and (S-m) training pixels
-            # randomly draw m pixels from the non-NaN values to form the test set
-            m = np.floor(S / 6)
-            allKxKCoords = list(product(range(k), range(k)))
-            allKxKCoords = np.asarray(allKxKCoords)
-            testingSetCoords = []
-            while len(testingSetCoords) < m:
-                randomCoordIndex = np.random.choice(len(allKxKCoords), size=1)
-                randomCoord = [allKxKCoords[randomCoordIndex][0][0], allKxKCoords[randomCoordIndex][0][1]]
-                if randomCoord not in testingSetCoords and not math.isnan(C[randomCoord[0], randomCoord[1]]):
-                    testingSetCoords.append(randomCoord)
-            # use the remaining (S-m) pixels to form the training set
-            trainingSetCoords = []
-            for row in range(k):
-                for col in range(k):
-                    if [row, col] not in testingSetCoords and not math.isnan(C[row][col]):
-                        trainingSetCoords.append([row, col])
 
-            # TODO: Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
+        for M in range(0, 20):
+            # TODO: Partition the S sensed pixels in the block (the training set) into
+            # m = floor(S/6) testing pixels and (S-m) training pixels
+            testingSetCoords, trainingSetCoords = getPartitionedPixelCoords(S, C)
+
+            # TODO:
+            #  Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
+            #  Three parts to this.
+            #  Calculate D = image sampled from C
+            #  Calculate A = rows from B corresponding to (x,y) locations of sensed pixels
+            #  Finally calculate k = DCT coefficients via LASSO
             # If the trainingSet is the column vector 'D',
             # then we need the original (x,y) coordinates of each pixel in the trainingSet to get 'A'
-            trainingSet = []
-            for coordinate in trainingSetCoords:
-                trainingSet.append(C[coordinate[0], coordinate[1]])
-            trainingSet = np.asarray(trainingSet).reshape(-1, 1)
-            # if trainingBasisMatrix is the matrix 'A',
-            # A = rows from B corresponding to (x,y) locations of sensed pixels
-            A = []
-            for coordinate in trainingSetCoords:
-                basisRowNumber = 8*coordinate[0] + coordinate[1]
-                basisRow = np.asarray(B[basisRowNumber, :])
-                A.append(basisRow)
-            A = np.asarray(A)
-            # Now we can calculate the DCT coefficient for the training data
+            trainingSet = getSampledImageWeights(trainingSetCoords, C)
 
+            # Last values for LASSO
+            c, Aprime, kOne, kPrime = getLassoValues(trainingSetCoords, B, completeBlock)
+            Y = np.add(np.dot(c, kOne), np.dot(Aprime, kPrime))
+
+            # Now we can calculate the DCT coefficient for the training data
+            clf = linear_model.Lasso(alpha=regularizationParam)
+            clf.fit(trainingSet, Y)
+            minK = clf.coef_
+
+            # TODO:
+
+
+# recovered values of testing pixels!!!!! for MSE
+
+
+# ------------------------------------------------------ MAIN --------------------------------------------------------
 
 
 def main():
@@ -205,6 +293,7 @@ def main():
     # print(originalImage.shape)
 
     kxkBlock = getKxKBlock(originalImage, 100, 150)
+    completeBlock = np.copy(kxkBlock)
     # imgShow(kxkBlock)
     # print("KxK Block")
     # print(kxkBlock)
@@ -222,7 +311,7 @@ def main():
 
     # TODO: MSE as a function of regularization parameter with S = 50
     # TODO: LASSO reconstruction using best regularization parameter value
-    imageReconstruction(corruptedkxkBlock, S)
+    imageReconstruction(completeBlock, corruptedkxkBlock, S)
 
 
 main()
