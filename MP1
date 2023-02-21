@@ -1,5 +1,6 @@
 import math
 import random
+from itertools import product
 
 import numpy
 import numpy as np
@@ -119,7 +120,6 @@ def generateBasisVectorMatrix():
             # appending each column of K^2 values horizontally to basisVectorMatrix
             basisVectorMatrix.append(rasterizedBasisChip)
 
-
     # our problem here is that basisVectorMatrix is a 3D array:
     # it is an K^2 size array of K^2x1 arrays, therefore K^2xK^2x1
     # we want it to be simply K^2xK^2
@@ -128,7 +128,7 @@ def generateBasisVectorMatrix():
     # we want the 1 dimension to be one of x and y so that we have (K^2 * 1 by K^2)
     # transposes basisVectorMatrix to be 1xK^2xK^2
     basisVectorMatrix = np.transpose(basisVectorMatrix, (2, 0, 1))
-    basisVectorMatrix = basisVectorMatrix.reshape(-1, (k*k))
+    basisVectorMatrix = basisVectorMatrix.reshape(-1, (k * k))
     # ended up having to transpose one last time
     basisVectorMatrix = np.transpose(basisVectorMatrix)
 
@@ -136,16 +136,16 @@ def generateBasisVectorMatrix():
 
 
 def imageReconstruction(image, S):
+    B = generateBasisVectorMatrix()
     # the image we pass will be the corrupted KxK block for now
     C = image
-    print(C)
     # S = number of sensed pixels
     S = S
     # column vector of the remaining sensed pixels
     # sensed pixels = sampled pixels
     # remove NaN values from C and then turn remaining values into a column vector
-    D = C[~np.isnan(C)]
-    D = D.reshape(-1, 1)
+    # D = C[~np.isnan(C)]
+    # D = D.reshape(-1, 1)
 
     # Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
     # look up logspace doc, same values every program compile :D
@@ -157,30 +157,41 @@ def imageReconstruction(image, S):
         # total error for each separate regularization parameter
         totalError = 0
         for M in range(0, 1):
-            m = np.floor(S/6)
-
             # TODO: Partition the S sensed pixels in the block (the training set) into
             # TODO: m=floor(S/6) testing pixels and (S-m) training pixels
-            # Logic for determining trainingSet and testingSet:
-            # 1. set trainingSet as the values of D as a row vector, we will delete the m pixels to get our S-m set
-            # 2. generate a list of the indices (our 'm' pixels) that we will be
-            #   (a). adding the value of trainingSet[index] to testingSet
-            #   (b). removing trainingSet[index]
-            # 3. We sort trainingSetIndices greatest to least after the first loop to avoid arrayOutOfBounds errors
-            elementNum = len(D) * len(D[0])
-            trainingSet = np.reshape(D, elementNum)
-            trainingSetIndices = np.random.choice(elementNum, size=int(m), replace=False)
-            testingSet = []
-            for index in trainingSetIndices:
-                testingSet.append(trainingSet[index])
-            trainingSetIndices[::-1].sort()
-            for index in trainingSetIndices:
-                trainingSet = np.delete(trainingSet, index)
-            testingSet = np.asarray(testingSet)
+            # randomly draw m pixels from the non-NaN values to form the test set
+            m = np.floor(S / 6)
+            allKxKCoords = list(product(range(k), range(k)))
+            allKxKCoords = np.asarray(allKxKCoords)
+            testingSetCoords = []
+            while len(testingSetCoords) < m:
+                randomCoordIndex = np.random.choice(len(allKxKCoords), size=1)
+                randomCoord = [allKxKCoords[randomCoordIndex][0][0], allKxKCoords[randomCoordIndex][0][1]]
+                if randomCoord not in testingSetCoords and not math.isnan(C[randomCoord[0], randomCoord[1]]):
+                    testingSetCoords.append(randomCoord)
+            # use the remaining (S-m) pixels to form the training set
+            trainingSetCoords = []
+            for row in range(k):
+                for col in range(k):
+                    if [row, col] not in testingSetCoords and not math.isnan(C[row][col]):
+                        trainingSetCoords.append([row, col])
 
             # TODO: Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
-            # If the trainingSet is the column vector 'D', 
+            # If the trainingSet is the column vector 'D',
             # then we need the original (x,y) coordinates of each pixel in the trainingSet to get 'A'
+            trainingSet = []
+            for coordinate in trainingSetCoords:
+                trainingSet.append(C[coordinate[0], coordinate[1]])
+            trainingSet = np.asarray(trainingSet).reshape(-1, 1)
+            # if trainingBasisMatrix is the matrix 'A',
+            # A = rows from B corresponding to (x,y) locations of sensed pixels
+            A = []
+            for coordinate in trainingSetCoords:
+                basisRowNumber = 8*coordinate[0] + coordinate[1]
+                basisRow = np.asarray(B[basisRowNumber, :])
+                A.append(basisRow)
+            A = np.asarray(A)
+            # Now we can calculate the DCT coefficient for the training data
 
 
 
@@ -204,8 +215,9 @@ def main():
     # print(corruptedkxkBlock)
     # print()
 
-
     # TODO: Visualization for K = 8, K = 16 basis vectors
+    B = generateBasisVectorMatrix()
+    # print(B)
     # imgShow(generateBasisVectorMatrix())
 
     # TODO: MSE as a function of regularization parameter with S = 50
