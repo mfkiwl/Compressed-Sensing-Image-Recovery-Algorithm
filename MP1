@@ -5,7 +5,7 @@ from itertools import product
 import numpy
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import cm
+from matplotlib import cm, pyplot
 from numpy import double
 from PIL import Image
 
@@ -145,24 +145,19 @@ def generateBasisVectorMatrix():
 
 # -------------------------------------- IMAGE RECONSTRUCTION FUNCTIONS ----------------------------------------------
 
-def getPartitionedPixelCoords(S, C):
+def getPartitionedPixelCoords(samples, S, C):
     m = np.floor(S / 6)
-
-    # generates row vector of all tuple (x, y) pairs for the matrix of size k*k
-    # i.e. for k = 8, allKxKCoords = [[0,0], [0,1], ... , [7, 6], [7,7]]
-    allKxKCoords = list(product(range(k), range(k)))
-    allKxKCoords = np.asarray(allKxKCoords)
 
     # randomly draw m pixels from the non-NaN values to form the test set
     testingSetCoords = []
     while len(testingSetCoords) < m:
         # chooses a single random index from allKxKCoords each iteration of while loop
-        randomCoordIndex = np.random.choice(len(allKxKCoords), size=1)
+        randomCoordIndex = np.random.choice(samples.shape[0], size=1)
         # randomCoord = the (x, y) pair from allKxKCoords at the randomly selected index
-        randomCoord = [allKxKCoords[randomCoordIndex][0][0], allKxKCoords[randomCoordIndex][0][1]]
+        randomCoord = [samples[randomCoordIndex][0][0], samples[randomCoordIndex][0][1]]
         # if this coordinate is not already in testingSetCoords = no replacement, only unique values
         # ignores NaN values
-        if randomCoord not in testingSetCoords and not math.isnan(C[randomCoord[0], randomCoord[1]]):
+        if randomCoord not in testingSetCoords:
             testingSetCoords.append(randomCoord)
         # repeat until we have 'm' unique, non-NaN coordinates in testingSetCoords
 
@@ -181,20 +176,20 @@ def getPartitionedPixelCoords(S, C):
     return testingSetCoords, trainingSetCoords
 
 
-def getSampledImageWeights(trainingSetCoords, C):
+def getSampledImageWeights(coords, C):
     # just gets the values for pixel intensities from the coordinates
     # returns it as a column vector to make it less annoying for me
     trainingSet = []
-    for coordinate in trainingSetCoords:
+    for coordinate in coords:
         trainingSet.append(C[coordinate[0], coordinate[1]])
     trainingSet = np.asarray(trainingSet).reshape(-1, 1)
 
     return trainingSet
 
 
-def getSampledBasisVectorMatrix(trainingSetCoords, B):
+def getSampledBasisVectorMatrix(coords, B):
     A = []
-    for coordinate in trainingSetCoords:
+    for coordinate in coords:
         # idea here is that every x [0-7] has their own [0-7] y values
         # and (x, y) spatial variables go down row-wise,
         # so to find the actual row out of K^2 rows, it is 8x+y
@@ -206,10 +201,11 @@ def getSampledBasisVectorMatrix(trainingSetCoords, B):
     return A
 
 
-def getLassoValues(trainingSetCoords, B, completeBlock):
+def getSeparateSampledBasisMatrix(coords, B):
     # if trainingBasisMatrix is the matrix 'A',
     # A = rows from B corresponding to (x,y) locations of sensed pixels
-    A = getSampledBasisVectorMatrix(trainingSetCoords, B)
+    A = getSampledBasisVectorMatrix(coords, B)
+    # print(A)
 
     # constant column u=1, v=1
     c = (A[:, 0]).reshape(-1, 1)
@@ -223,37 +219,53 @@ def getLassoValues(trainingSetCoords, B, completeBlock):
     temp = temp.reshape(-1, (k * k) - 1)
     Aprime = temp
 
-    completeBlock = np.asarray(completeBlock).reshape(-1, 1)
-    kComplete = np.dot(np.linalg.inv(B), completeBlock)
-    kOne = [kComplete[0][0]]
-    kPrime = kComplete[1:, 0]
-    kPrime = kPrime.reshape(-1, 1)
+    return Aprime
 
-    return c, Aprime, kOne, kPrime
+
+def getTestingMeanSquaredError(testingSetCoords, recoveredC, originalImage):
+    MSE = 0
+    for coords in testingSetCoords:
+        X = coords[0]
+        Y = coords[1]
+        difference = recoveredC[X][Y] - originalImage[X][Y]
+        difference = difference * difference
+        MSE = MSE + difference
+
+    MSE = MSE / (len(testingSetCoords))
+
+    return MSE
 
 
 # ------------------------------------------- IMAGE RECONSTRUCTION ---------------------------------------------------
 
 
-def imageReconstruction(completeBlock, corruptedKxKBlock, S):
+def imageReconstruction(corruptedKxKBlock, S):
     # B = Basis Vector Matrix, C = corrupted KxK block for now, S = number of sensed/sampled pixels
     B = generateBasisVectorMatrix()
     C = corruptedKxKBlock
 
-    # TODO: Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
-    # look up logspace doc, same values every program compile
+    sampledPixelCoords = []
+    for row in range(k):
+        for col in range(k):
+            if [row, col] not in sampledPixelCoords and not math.isnan(C[row][col]):
+                sampledPixelCoords.append([row, col])
+    sampledPixelCoords = np.asarray(sampledPixelCoords)
 
+    # TODO: Consider a large range of l: 1e-6 → 1e+6, with a few values per decade [logspace]
     lambdaRange = np.logspace(-6, 6, num=40, base=10.0, endpoint=True)
-    # lambdaRange = [1e6]
+    # lambdaRange = [1e-3]
+
+    runs = 20
+    pairArray = []
 
     for regularizationParam in lambdaRange:
         # total error for each separate regularization parameter
         totalError = 0
 
-        for M in range(0, 20):
+        for M in range(0, runs):
             # TODO: Partition the S sensed pixels in the block (the training set) into
             # m = floor(S/6) testing pixels and (S-m) training pixels
-            testingSetCoords, trainingSetCoords = getPartitionedPixelCoords(S, C)
+            testingSetCoords, trainingSetCoords = getPartitionedPixelCoords(samples=sampledPixelCoords, S=S, C=C)
 
             # TODO:
             #  Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
@@ -263,18 +275,58 @@ def imageReconstruction(completeBlock, corruptedKxKBlock, S):
             #  Finally calculate k = DCT coefficients via LASSO
             # If the trainingSet is the column vector 'D',
             # then we need the original (x,y) coordinates of each pixel in the trainingSet to get 'A'
-            trainingSet = getSampledImageWeights(trainingSetCoords, C)
+            trainingSet = getSampledImageWeights(coords=trainingSetCoords, C=C)
+            # print(trainingSet)
 
-            # Last values for LASSO
-            c, Aprime, kOne, kPrime = getLassoValues(trainingSetCoords, B, completeBlock)
-            Y = np.add(np.dot(c, kOne), np.dot(Aprime, kPrime))
+            # Last values for LASSO **SEPARATES A FROM CONSTANT COLUMN**
+            A = getSampledBasisVectorMatrix(trainingSetCoords, B)
 
             # Now we can calculate the DCT coefficient for the training data
-            clf = linear_model.Lasso(alpha=regularizationParam)
-            clf.fit(trainingSet, Y)
-            minK = clf.coef_
+            clf = linear_model.Lasso(alpha=regularizationParam, fit_intercept=False)
+            clf.fit(A, trainingSet)
+            kHat = clf.coef_
+            recoveredC = np.dot(B, kHat)
+            recoveredC = recoveredC.reshape((C.shape[0], C.shape[1]))
 
-            # TODO:
+            totalError = totalError + getTestingMeanSquaredError(
+                testingSetCoords=testingSetCoords,
+                recoveredC=recoveredC,
+                originalImage=C
+            )
+
+        # end of M = 20 loop
+        totalError = totalError / runs
+        pairArray.append([regularizationParam, totalError])
+
+    # end of lambda loop
+
+    pairArray = np.asarray(pairArray)
+    y_min = np.min(pairArray[:, 1])
+    smallestLambda = pairArray[np.where(pairArray == y_min)[0][0]][0]
+
+    # plotting
+    x, y = pairArray.T
+    pyplot.plot(x, y, color='blue', lw=2)
+    pyplot.xscale('log')
+    plt.title('Avg MSE vs Regularization Parameter')
+    plt.ylabel('Average MSE after M=20 Runs')
+    plt.xlabel('Regularization Parameter, Lambda')
+    pyplot.show()
+
+    # TODO: Given “best” lambda identified for a block through cross-validation,
+    #  use all S samples to find basis vector (DCT) coefficients
+    sampledPixels = getSampledImageWeights(coords=sampledPixelCoords, C=C)
+    A = getSampledBasisVectorMatrix(sampledPixelCoords, B)
+    clf = linear_model.Lasso(alpha=smallestLambda, fit_intercept=False)
+    clf.fit(A, sampledPixels)
+    kHat = clf.coef_
+    recoveredC = np.dot(B, kHat)
+    recoveredC = recoveredC.reshape((C.shape[0], C.shape[1]))
+    print(C)
+    print(recoveredC)
+    imgShow(C)
+    imgShow(recoveredC)
+
 
 
 # recovered values of testing pixels!!!!! for MSE
@@ -286,19 +338,19 @@ def imageReconstruction(completeBlock, corruptedKxKBlock, S):
 def main():
     S = 50
 
-    originalImage = imgRead('C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
+    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
     # imgShow(originalImage)
     # print("Original Image")
     # print(originalImage)
     # print(originalImage.shape)
 
-    kxkBlock = getKxKBlock(originalImage, 100, 150)
+    kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=100, topLeftY=150)
     completeBlock = np.copy(kxkBlock)
     # imgShow(kxkBlock)
     # print("KxK Block")
     # print(kxkBlock)
 
-    corruptedkxkBlock = corruptKxKBlock(kxkBlock, S)
+    corruptedkxkBlock = corruptKxKBlock(imgIn=kxkBlock, S=S)
     # imgShow(corruptedkxkBlock)
     # print("Corrupt KxK Block")
     # print(corruptedkxkBlock)
@@ -311,7 +363,7 @@ def main():
 
     # TODO: MSE as a function of regularization parameter with S = 50
     # TODO: LASSO reconstruction using best regularization parameter value
-    imageReconstruction(completeBlock, corruptedkxkBlock, S)
+    imageReconstruction(corruptedKxKBlock=corruptedkxkBlock, S=S)
 
 
 main()
