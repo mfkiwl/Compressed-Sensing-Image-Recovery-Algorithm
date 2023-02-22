@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 random.seed(a=None, version=2)
 # value for kxk blocks
-k = 8
+k = 16
 
 
 # ------------------------------------------------- FUNCTIONS ------------------------------------------------------
@@ -139,6 +139,9 @@ def generateBasisVectorMatrix():
     basisVectorMatrix = basisVectorMatrix.reshape(-1, (k * k))
     # ended up having to transpose one last time
     basisVectorMatrix = np.transpose(basisVectorMatrix)
+    plt.imshow(basisVectorMatrix, cmap=cm.gray)
+    plt.title('Visualization of Basis Vector Matrix for K=16')
+    plt.show()
 
     return basisVectorMatrix
 
@@ -193,7 +196,7 @@ def getSampledBasisVectorMatrix(coords, B):
         # idea here is that every x [0-7] has their own [0-7] y values
         # and (x, y) spatial variables go down row-wise,
         # so to find the actual row out of K^2 rows, it is 8x+y
-        basisRowNumber = 8 * coordinate[0] + coordinate[1]
+        basisRowNumber = k * coordinate[0] + coordinate[1]
         basisRow = np.asarray(B[basisRowNumber, :])
         A.append(basisRow)
     A = np.asarray(A)
@@ -308,7 +311,7 @@ def imageReconstruction(corruptedKxKBlock, S):
     x, y = pairArray.T
     pyplot.plot(x, y, color='blue', lw=2)
     pyplot.xscale('log')
-    plt.title('Avg MSE vs Regularization Parameter')
+    plt.title('Avg MSE vs Regularization Parameter for S=10')
     plt.ylabel('Average MSE after M=20 Runs')
     plt.xlabel('Regularization Parameter, Lambda')
     pyplot.show()
@@ -324,8 +327,8 @@ def imageReconstruction(corruptedKxKBlock, S):
     recoveredC = recoveredC.reshape((C.shape[0], C.shape[1]))
     print(C)
     print(recoveredC)
-    imgShow(C)
-    imgShow(recoveredC)
+
+    return recoveredC
 
 
 
@@ -335,22 +338,24 @@ def imageReconstruction(corruptedKxKBlock, S):
 # ------------------------------------------------------ MAIN --------------------------------------------------------
 
 
-def main():
-    S = 50
 
-    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
+def main():
+    S = 10
+
+    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/nature.bmp')
     # imgShow(originalImage)
     # print("Original Image")
     # print(originalImage)
     # print(originalImage.shape)
-
-    kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=100, topLeftY=150)
+    X = (16*(5-1)+1)
+    Y = (16*(8-1)+1)
+    kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=X, topLeftY=Y)
     completeBlock = np.copy(kxkBlock)
     # imgShow(kxkBlock)
     # print("KxK Block")
     # print(kxkBlock)
 
-    corruptedkxkBlock = corruptKxKBlock(imgIn=kxkBlock, S=S)
+    corruptedKxKBlock = corruptKxKBlock(imgIn=kxkBlock, S=S)
     # imgShow(corruptedkxkBlock)
     # print("Corrupt KxK Block")
     # print(corruptedkxkBlock)
@@ -363,7 +368,13 @@ def main():
 
     # TODO: MSE as a function of regularization parameter with S = 50
     # TODO: LASSO reconstruction using best regularization parameter value
-    imageReconstruction(corruptedKxKBlock=corruptedkxkBlock, S=S)
+    recoveredKxKBlock = imageReconstruction(corruptedKxKBlock=corruptedKxKBlock, S=S)
+    plt.imshow(corruptedKxKBlock, cmap=cm.gray)
+    plt.title('Corrupted 16x16 Block for X=65,Y=113,S=10')
+    plt.show()
+    plt.imshow(recoveredKxKBlock, cmap=cm.gray)
+    plt.title('Reconstructed 16x16 Block for X=65,Y=113,S=10')
+    plt.show()
 
 
 main()
