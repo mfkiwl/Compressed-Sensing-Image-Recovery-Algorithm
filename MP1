@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, pyplot
 from numpy import double
 from PIL import Image
+from scipy import signal
 
 import warnings
 
@@ -16,8 +17,6 @@ from sklearn import linear_model
 warnings.filterwarnings("ignore", category=UserWarning)
 
 random.seed(a=None, version=2)
-# value for kxk blocks
-k = 16
 
 
 # ------------------------------------------------- FUNCTIONS ------------------------------------------------------
@@ -37,7 +36,8 @@ def imgShow(imgOut):
 
 
 # k^2 - S corrupted pixels given S = sensed pixels
-def corruptKxKBlock(imgIn, S):
+def corruptKxKBlock(imgIn, S, k):
+    # print(imgIn.shape)
     corruptPixels = random.sample([[x, y]
                                    for x in range(0, imgIn.shape[0])
                                    for y in range(0, imgIn.shape[1])],
@@ -50,7 +50,7 @@ def corruptKxKBlock(imgIn, S):
 
 # returns KxK block with topLeftX and topLeftY as the top-left corner pixel
 # X = col number, Y = row number !!!
-def getKxKBlock(imgIn, topLeftX, topLeftY):
+def getKxKBlock(imgIn, topLeftX, topLeftY, k):
     # imgIn.shape returns a [width, height] array of the image dimensions
     # if statement ensures we have enough space to make the KxK block
     if topLeftX + k <= imgIn.shape[0] and topLeftY <= imgIn.shape[1]:
@@ -69,7 +69,7 @@ def getKxKBlock(imgIn, topLeftX, topLeftY):
 # ----------------------------------------- BASIS VECTOR MATRIX ------------------------------------------------------
 
 
-def generateBasisVectorMatrix():
+def generateBasisVectorMatrix(k):
     basisVectorMatrix = []
     for u in range(1, k + 1):
 
@@ -139,16 +139,13 @@ def generateBasisVectorMatrix():
     basisVectorMatrix = basisVectorMatrix.reshape(-1, (k * k))
     # ended up having to transpose one last time
     basisVectorMatrix = np.transpose(basisVectorMatrix)
-    plt.imshow(basisVectorMatrix, cmap=cm.gray)
-    plt.title('Visualization of Basis Vector Matrix for K=16')
-    plt.show()
 
     return basisVectorMatrix
 
 
 # -------------------------------------- IMAGE RECONSTRUCTION FUNCTIONS ----------------------------------------------
 
-def getPartitionedPixelCoords(samples, S, C):
+def getPartitionedPixelCoords(samples, S, C, k):
     m = np.floor(S / 6)
 
     # randomly draw m pixels from the non-NaN values to form the test set
@@ -190,7 +187,7 @@ def getSampledImageWeights(coords, C):
     return trainingSet
 
 
-def getSampledBasisVectorMatrix(coords, B):
+def getSampledBasisVectorMatrix(coords, B, k):
     A = []
     for coordinate in coords:
         # idea here is that every x [0-7] has their own [0-7] y values
@@ -207,7 +204,7 @@ def getSampledBasisVectorMatrix(coords, B):
 def getSeparateSampledBasisMatrix(coords, B):
     # if trainingBasisMatrix is the matrix 'A',
     # A = rows from B corresponding to (x,y) locations of sensed pixels
-    A = getSampledBasisVectorMatrix(coords, B)
+    A = getSampledBasisVectorMatrix(coords, B, k)
     # print(A)
 
     # constant column u=1, v=1
@@ -241,10 +238,13 @@ def getTestingMeanSquaredError(testingSetCoords, recoveredC, originalImage):
 
 # ------------------------------------------- IMAGE RECONSTRUCTION ---------------------------------------------------
 
+def medianFiltering(recoveredKxKBlock):
+    return signal.medfilt2d(recoveredKxKBlock, kernel_size=3)
 
-def imageReconstruction(corruptedKxKBlock, S):
+
+def imageReconstruction(corruptedKxKBlock, S, k):
     # B = Basis Vector Matrix, C = corrupted KxK block for now, S = number of sensed/sampled pixels
-    B = generateBasisVectorMatrix()
+    B = generateBasisVectorMatrix(k)
     C = corruptedKxKBlock
 
     sampledPixelCoords = []
@@ -268,7 +268,7 @@ def imageReconstruction(corruptedKxKBlock, S):
         for M in range(0, runs):
             # TODO: Partition the S sensed pixels in the block (the training set) into
             # m = floor(S/6) testing pixels and (S-m) training pixels
-            testingSetCoords, trainingSetCoords = getPartitionedPixelCoords(samples=sampledPixelCoords, S=S, C=C)
+            testingSetCoords, trainingSetCoords = getPartitionedPixelCoords(samples=sampledPixelCoords, S=S, C=C, k=k)
 
             # TODO:
             #  Determine the basis vector (DCT) coefficients for the (S-m) pixels in the training set
@@ -282,7 +282,7 @@ def imageReconstruction(corruptedKxKBlock, S):
             # print(trainingSet)
 
             # Last values for LASSO **SEPARATES A FROM CONSTANT COLUMN**
-            A = getSampledBasisVectorMatrix(trainingSetCoords, B)
+            A = getSampledBasisVectorMatrix(trainingSetCoords, B, k=k)
 
             # Now we can calculate the DCT coefficient for the training data
             clf = linear_model.Lasso(alpha=regularizationParam, fit_intercept=False)
@@ -307,29 +307,17 @@ def imageReconstruction(corruptedKxKBlock, S):
     y_min = np.min(pairArray[:, 1])
     smallestLambda = pairArray[np.where(pairArray == y_min)[0][0]][0]
 
-    # plotting
-    x, y = pairArray.T
-    pyplot.plot(x, y, color='blue', lw=2)
-    pyplot.xscale('log')
-    plt.title('Avg MSE vs Regularization Parameter for S=10')
-    plt.ylabel('Average MSE after M=20 Runs')
-    plt.xlabel('Regularization Parameter, Lambda')
-    pyplot.show()
-
     # TODO: Given “best” lambda identified for a block through cross-validation,
     #  use all S samples to find basis vector (DCT) coefficients
     sampledPixels = getSampledImageWeights(coords=sampledPixelCoords, C=C)
-    A = getSampledBasisVectorMatrix(sampledPixelCoords, B)
+    A = getSampledBasisVectorMatrix(sampledPixelCoords, B, k)
     clf = linear_model.Lasso(alpha=smallestLambda, fit_intercept=False)
     clf.fit(A, sampledPixels)
     kHat = clf.coef_
     recoveredC = np.dot(B, kHat)
     recoveredC = recoveredC.reshape((C.shape[0], C.shape[1]))
-    print(C)
-    print(recoveredC)
 
     return recoveredC
-
 
 
 # recovered values of testing pixels!!!!! for MSE
@@ -338,43 +326,105 @@ def imageReconstruction(corruptedKxKBlock, S):
 # ------------------------------------------------------ MAIN --------------------------------------------------------
 
 
-
 def main():
-    S = 10
+    S = 50
+    k = 8
 
-    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/nature.bmp')
+    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
     # imgShow(originalImage)
     # print("Original Image")
     # print(originalImage)
     # print(originalImage.shape)
-    X = (16*(5-1)+1)
-    Y = (16*(8-1)+1)
-    kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=X, topLeftY=Y)
-    completeBlock = np.copy(kxkBlock)
+    xDimension = originalImage.shape[0]
+    yDimension = originalImage.shape[1]
+
+    if (xDimension % 8 == 0) and (yDimension % 8 == 0):
+        if ((xDimension / 8) * (yDimension / 8)) < 1000:
+            k = 8
+        else:
+            if (xDimension % 16 == 0) and (yDimension & 16 == 0):
+                k = 16
+    else:
+        raise Exception("Invalid dimensions, must be divisible by 8.")
+
+    fullRecoveredImageArray = []
+    fullFilteredImageArray = []
+    for yCoord in range(0, xDimension, k):
+
+        fullRecoveredImageRow = []
+        fullFilteredImageRow = []
+
+        for xCoord in range(0, yDimension, k):
+            # ------ gets the block ------
+            kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=xCoord, topLeftY=yCoord, k=k)
+            print(kxkBlock.shape, xCoord, yCoord)
+            corruptedKxKBlock = corruptKxKBlock(imgIn=kxkBlock, S=S, k=k)
+            B = generateBasisVectorMatrix(k=k)
+            recoveredKxKBlock = imageReconstruction(corruptedKxKBlock=corruptedKxKBlock, S=S, k=k)
+            filteredKxKBlock = medianFiltering(recoveredKxKBlock)
+            # ----------------------------
+
+            fullRecoveredImageRow.append(recoveredKxKBlock)
+            fullFilteredImageRow.append(filteredKxKBlock)
+
+        # end for loop
+        fullRecoveredImageRow = np.concatenate(fullRecoveredImageRow, axis=1)
+        fullFilteredImageRow = np.concatenate(fullFilteredImageRow, axis=1)
+
+        if yCoord == 0:
+            fullRecoveredImageArray = fullRecoveredImageRow
+            fullFilteredImageArray = fullFilteredImageRow
+        else:
+            fullRecoveredImageArray = np.concatenate((fullRecoveredImageArray, fullRecoveredImageRow), axis=0)
+            fullFilteredImageArray = np.concatenate((fullFilteredImageArray, fullFilteredImageRow), axis=0)
+    # end for loop
+
+    plt.imshow(originalImage, cmap=cm.gray)
+    plt.title('Original Image')
+    plt.show()
+
+    plt.imshow(fullRecoveredImageArray, cmap=cm.gray)
+    plt.title('Recovered Image')
+    plt.show()
+
+    plt.imshow(fullFilteredImageArray, cmap=cm.gray)
+    plt.title('Filtered Recovered Image')
+    plt.show()
+
+    # kxkBlock = getKxKBlock(imgIn=originalImage, topLeftX=X, topLeftY=Y, k=k)
+    # completeBlock = np.copy(kxkBlock)
     # imgShow(kxkBlock)
     # print("KxK Block")
     # print(kxkBlock)
 
-    corruptedKxKBlock = corruptKxKBlock(imgIn=kxkBlock, S=S)
+    # corruptedKxKBlock = corruptKxKBlock(imgIn=kxkBlock, S=S, k=k)
     # imgShow(corruptedkxkBlock)
     # print("Corrupt KxK Block")
     # print(corruptedkxkBlock)
     # print()
 
     # TODO: Visualization for K = 8, K = 16 basis vectors
-    B = generateBasisVectorMatrix()
+    # B = generateBasisVectorMatrix(k=k)
     # print(B)
     # imgShow(generateBasisVectorMatrix())
 
     # TODO: MSE as a function of regularization parameter with S = 50
     # TODO: LASSO reconstruction using best regularization parameter value
-    recoveredKxKBlock = imageReconstruction(corruptedKxKBlock=corruptedKxKBlock, S=S)
-    plt.imshow(corruptedKxKBlock, cmap=cm.gray)
-    plt.title('Corrupted 16x16 Block for X=65,Y=113,S=10')
-    plt.show()
-    plt.imshow(recoveredKxKBlock, cmap=cm.gray)
-    plt.title('Reconstructed 16x16 Block for X=65,Y=113,S=10')
-    plt.show()
+    # recoveredKxKBlock = imageReconstruction(corruptedKxKBlock=corruptedKxKBlock, S=S, k=k)
+    # plt.imshow(corruptedKxKBlock, cmap=cm.gray)
+    # plt.title('Corrupted 8x8 Block')
+    # plt.show()
+    # plt.imshow(recoveredKxKBlock, cmap=cm.gray)
+    # plt.title('Reconstructed 8x8 Block')
+    # plt.show()
+
+    # filteredKxKBlock = medianFiltering(recoveredKxKBlock)
+    # plt.imshow(filteredKxKBlock, cmap=cm.gray)
+    # plt.title('Median Filtered 8x8 Block')
+    # plt.show()
+
+    # print(recoveredKxKBlock)
+    # print(filteredKxKBlock)
 
 
 main()
