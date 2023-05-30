@@ -52,8 +52,11 @@ As a low-level overview of the methodology needed to thoroughly understand the c
 ## USAGE
 ### Input
 1. In the main function, change the image in the following line of code to the local path of the uploaded corrupted image.
+
     - `originalImage = imgRead(file='C:/Users/elliot/PycharmProjects/pythonProject/fishing_boat.bmp')`
+
 2.  Similarly, change the "k" value to either K = 8 or K = 16 depending on the size of the uploaded image.
+
     - `k = 8`
 
 ### Output
