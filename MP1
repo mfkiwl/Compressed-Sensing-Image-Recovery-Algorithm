@@ -330,7 +330,7 @@ def main():
     S = 50
     k = 8
 
-    originalImage = imgRead(file='C:/Users/ellio/PycharmProjects/pythonProject/fishing_boat.bmp')
+    originalImage = imgRead(file='C:/Users/elliot/PycharmProjects/pythonProject/fishing_boat.bmp')
     # imgShow(originalImage)
     # print("Original Image")
     # print(originalImage)
