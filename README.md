@@ -13,12 +13,12 @@
         Although there is no GUI built yet, this project is available for local installation and setup. I plan to continue this project and make something user-facing after I have more free time during the semester. :)
     </p>
     <p>
-        Background · Getting Started
+        <a href="background">Background</a> · <a href="getting-started">Getting Started</a>
     </p>
 </div>
 
 <div>
-    <h2>Background</h2>
+    <h2 id="background">Background</h2>
     <p>
         Suppose we are given an image. ​However, due to file corruption, or data loss, or mercury being in retrograde, our image is missing
 pixels. A lot of pixels. The way that we intend to “recover” these pixels is through a process known as
@@ -46,7 +46,7 @@ for the sparsest solution of <b>s</b> in the transform basis, which allows us to
 </div>
 
 <div>
-    <h2>Getting Started</h2>
+    <h2 id="getting-started">Getting Started</h2>
     <p>
         Currently, there is no user-facing GUI built for this program (yet!). To run the algorithm, a manual download and setup of the Python file on your local machine is required. After downloading model.py, it is necessary to manually change the variable on line 333, originalImage, to the local path of your <b>COMPLETE, UNCORRUPTED</b> image. For small images, keep the variable <b>k = 8</b> on line 331. For larger images, change to <b>k = 16</b>.  
     </p>
