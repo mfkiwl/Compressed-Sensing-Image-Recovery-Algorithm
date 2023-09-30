@@ -13,7 +13,7 @@
         Although there is no GUI built yet, this project is available for local installation and setup. I plan to continue this project and make something user-facing after I have more free time during the semester. :)
     </p>
     <p>
-        <a href="background">Background</a> · <a href="getting-started">Getting Started</a>
+        <a href="[background](https://github.com/elliothha/Compressed-Sensing-Image-Recovery#background)">Background</a> · <a href="[getting-started](https://github.com/elliothha/Compressed-Sensing-Image-Recovery#getting-started)">Getting Started</a>
     </p>
 </div>
 
