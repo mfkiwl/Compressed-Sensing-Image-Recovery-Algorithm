@@ -1,67 +1,59 @@
-# Compressed Sensing Image Recovery
-## INTRODUCTION
-Given a corrupted image with missing pixels, this project exploits the [sparsity](https://en.wikipedia.org/wiki/Sparse_matrix) in natural images to generate a prediction of the original image with the missing pixels filled in, or "recovered". Specifically, this is a signal processing technique known as [compressed sensing image reconstruction](https://en.wikipedia.org/wiki/Compressed_sensing). Median filtering is applied to the recovered image in order to smooth out the image in the interest of pursuing higher fidelity.
+<div align="center">
+    <h2>Compressed Sensing Image Recovery</h2>
+    <p>
+        <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54" />
+        <img src="https://img.shields.io/badge/Matplotlib-%23ffffff.svg?style=for-the-badge&logo=Matplotlib&logoColor=black" />
+        <img src="https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white" />
+        <img src="https://img.shields.io/badge/SciPy-%230C55A5.svg?style=for-the-badge&logo=scipy&logoColor=%white" />
+        <img src="https://img.shields.io/badge/scikit--learn-%23F7931E.svg?style=for-the-badge&logo=scikit-learn&logoColor=white" />
+    </p>
+    <p>
+        Algorithmically sample corruption and recover the original image via <b>compressed sensing signal processing</b>.
+    <p>
+        Although there is no GUI built yet, this project is available for local installation and setup. I plan to continue this project and make something user-facing after I have more free time during the semester. :)
+    </p>
+    <p>
+        Background · Getting Started
+    </p>
+</div>
 
-### Built With
-- [NumPy](https://numpy.org/)
-- [SciPy](https://scipy.org/)
-- [SciKitLearn](https://scikit-learn.org/stable/)
-- [Matplotlib](https://matplotlib.org/)
+<div>
+    <h2>Background</h2>
+    <p>
+        Suppose we are given an image. ​However, due to file corruption, or data loss, or mercury being in retrograde, our image is missing
+pixels. A lot of pixels. The way that we intend to “recover” these pixels is through a process known as
+compressed sensing image recovery. This is a signal processing technique which exploits the sparse
+representation of coefficients of the image vector in a generic transform basis in order to reconstruct
+the original uncorrupted image by solving an underdetermined system of equations for the sparsest
+solution via L1 regression.
+    </p>
+    <p>
+        For our 
+image, each pixel is represented by its intensity on a particular scale. For our purposes, we will be
+using a grayscale colormap with values linearly mapped from 0 to 255. Let’s call our complete image the
+vector, <b>x</b>, where the 2D matrix of pixel intensities is rasterized into a single column vector.
+    </p>
+    <p>
+        Our image has a sparse representation, <b>s</b>, in some transform basis different from our image’s
+regression. We can infer
+what the nonzero coefficients of s are such that we get the sparse representation in the transform basis,
+and from that get the original image. This is the idea behind compressed sensing.
+    </p>
+    <p>
+        More specifically, we are looking to solve this underdetermined system of equations by solving
+for the sparsest solution of <b>s</b> in the transform basis, which allows us to arrive at a particular solution given by the L1-norm.
+    </p>
+</div>
 
-## DEMO
-To first give an example of the project's capabilities before going more in depth into the methodology, our given test image of a fishing boat is 192x200 pixels. 
-
-### Original Image
-<img width="340" alt="image" src="https://github.com/elliothha/Compressed-Sensing-Image-Recovery/assets/125780179/5e97a963-b24b-4b56-9cca-0e16c5c1a0ff">
-
-### Methodology
-As a low-level overview of the methodology needed to thoroughly understand the context behind the images, in order to simulate "corruptness" in our original image for demonstration purposes, the fishing boat image was partitioned into KxK pixel blocks, where K = 8. In each of these KxK blocks, a certain number of pixels are randomly chosen and have their numerical color values set to zero in order to imitate "missing pixels". This number of pixels would depend on the value of S, where S = the amount of pixels to be retained in each block. 
-
-The following images demonstrate this projects capabilities are varying levels of simulated "corruptness". Necessarily, for images that are already corrupted with missing pixels, this process is not necessary and we can simply consider the results. Each recovered image has [median filtering](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.medfilt.html) applied to it with a kernel size of 3. A total mean squared error comparison is calculated between the two recovered images numerical color values.
-
-### S = 50 Retained Pixels per KxK Block
-<img width="1193" alt="Screenshot 2023-05-29 at 10 42 15 PM" src="https://github.com/elliothha/Compressed-Sensing-Image-Recovery/assets/125780179/3d3b6645-dcb0-4ae5-97a6-9064424ec356">
-
-### S = 30 Retained Pixels per KxK Block
-<img width="1185" alt="Screenshot 2023-05-29 at 10 45 16 PM" src="https://github.com/elliothha/Compressed-Sensing-Image-Recovery/assets/125780179/92d17b34-a0aa-4efe-9b2b-2adadd26b351">
-
-### S = 10 Retained Pixels per KxK Block
-<img width="1199" alt="Screenshot 2023-05-29 at 10 47 19 PM" src="https://github.com/elliothha/Compressed-Sensing-Image-Recovery/assets/125780179/37fc278e-4a5d-4b0a-a108-10662bb522c4">
-
-## SETUP
-1. Clone this repository using the following command:
-
-    - `git clone https://github.com/elliothha/Compressed-Sensing-Image-Recovery.git`
-    
-2. Change into source directory
-
-    - `cd src`
-    
-3. Upload corrupted image to directory
-
-4. Install the following packages:
-
-    - math
-    - random
-    - itertools
-    - numpy
-    - matplotlib
-    - PIL
-    - scipy
-    - sklearn
-    - warnings
-
-## USAGE
-### Input
-1. In the main function, change the image in the following line of code to the local path of the uploaded corrupted image.
-
-    - `originalImage = imgRead(file='C:/Users/elliot/PycharmProjects/pythonProject/fishing_boat.bmp')`
-
-2.  Similarly, change the "k" value to either K = 8 or K = 16 depending on the size of the uploaded image.
-
-    - `k = 8`
-
-### Output
-1. Download recovered image from the generated MatPlotLib plots.
-
-
+<div>
+    <h2>Getting Started</h2>
+    <p>
+        Currently, there is no user-facing GUI built for this program (yet!). To run the algorithm, a manual download and setup of the Python file on your local machine is required. After downloading model.py, it is necessary to manually change the variable on line 333, originalImage, to the local path of your <b>COMPLETE, UNCORRUPTED</b> image. For small images, keep the variable <b>k = 8</b> on line 331. For larger images, change to <b>k = 16</b>.  
+    </p>
+    <p>
+        For sampling corruption levels, change the variable <b>S</b> on line 330 to be the number of pixels per KxK block to remain. For example, for S = 50, k = 8, there will be 50 pixels remaining out of every 8x8 (64 total pixels) block in the image. For S = 10, k = 8, there will be a very corrupted result of 10 pixels remaining out of every 8x8 block.
+    </p>
+    <p>
+        Run locally and save results.
+    </p>
+</div>
